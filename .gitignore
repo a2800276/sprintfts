@@ -1,0 +1,4 @@
+*.go
+*.c
+a.out
+.vscode
