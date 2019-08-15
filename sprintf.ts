@@ -1,12 +1,3 @@
-import { fromExponential } from "./fromExponential.ts";
-
-export function sprintf(format: string, ...args: any[]): string {
-  let printf = new Printf(format, ...args);
-  return printf.doPrintf();
-}
-
-let p = console.log;
-
 enum State {
   PASSTHROUGH,
   PERCENT,
@@ -20,27 +11,17 @@ enum WorP {
 }
 
 class Flags {
-  plus: boolean;
-  dash: boolean;
-  sharp: boolean;
-  space: boolean;
-  zero: boolean;
-  lessthan: boolean;
+  plus?: boolean;
+  dash?: boolean;
+  sharp?: boolean;
+  space?: boolean;
+  zero?: boolean;
+  lessthan?: boolean;
   width: number = -1;
   precision: number = -1;
 }
 
-function exponential(n: number): string {
-  let s = fromExponential(n);
-  if (s.indexOf(".") == -1) {
-    s += ".";
-  }
-  return s;
-}
-
-function isNumber(a:any) : boolean {
-  return (typeof a === 'number')
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 
 const min = Math.min;
 
@@ -58,28 +39,31 @@ enum F {
 
 class Printf {
   format: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   args: any[];
   i: number;
 
   state: State = State.PASSTHROUGH;
-  verb: string;
+  verb: string = "";
   buf: string = "";
   argNum: number = 0;
-  flags: Flags;
+  flags: Flags = new Flags();
 
-  haveSeen: boolean[]
+  haveSeen: boolean[];
 
   // barf, store precision and width errors for later processing ...
-  tmpError? : string
+  tmpError?: string;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(format: string, ...args: any[]) {
     this.format = format;
     this.args = args;
-    this.haveSeen = new Array(args.length)
+    this.haveSeen = new Array(args.length);
+    this.i = 0;
   }
 
   doPrintf(): string {
-    for (this.i = 0; this.i < this.format.length; ++this.i) {
+    for (; this.i < this.format.length; ++this.i) {
       let c = this.format[this.i];
       switch (this.state) {
         case State.PASSTHROUGH:
@@ -103,16 +87,16 @@ class Printf {
     }
     // check for unhandled args
     let extras = false;
-    let err = "%!(EXTRA"
-    for ( let i = 0; i!== this.haveSeen.length; ++i) {
+    let err = "%!(EXTRA";
+    for (let i = 0; i !== this.haveSeen.length; ++i) {
       if (!this.haveSeen[i]) {
-        extras = true
-        err += ` '${Deno.inspect(this.args[i])}'`
+        extras = true;
+        err += ` '${Deno.inspect(this.args[i])}'`;
       }
     }
-    err += ")"
+    err += ")";
     if (extras) {
-      this.buf += err
+      this.buf += err;
     }
     return this.buf;
   }
@@ -147,7 +131,8 @@ class Printf {
               flags.space = true;
               break;
             case "0":
-              flags.zero = !flags.dash; // only left pad zeros, dash takes precedence
+              // only left pad zeros, dash takes precedence
+              flags.zero = !flags.dash;
               break;
             default:
               if (("1" <= c && c <= "9") || c === "." || c === "*") {
@@ -167,39 +152,40 @@ class Printf {
           break;
         case State.POSITIONAL: // either a verb or * only verb for now, TODO
           if (c === "*") {
-            let worp = this.flags.precision === -1 ? WorP.WIDTH : WorP.PRECISION
-            this.handleWidthOrPrecisionRef( worp )
-            this.state = State.PERCENT
-            break
+            let worp =
+              this.flags.precision === -1 ? WorP.WIDTH : WorP.PRECISION;
+            this.handleWidthOrPrecisionRef(worp);
+            this.state = State.PERCENT;
+            break;
           } else {
             this.handleVerb();
             return; // always end in verb
           }
         default:
-          throw new Error(`Should not be here ${this.state}, library bug!`)
+          throw new Error(`Should not be here ${this.state}, library bug!`);
       } // switch state
     }
   }
-  handleWidthOrPrecisionRef ( wOrP: WorP) : void {
+  handleWidthOrPrecisionRef(wOrP: WorP): void {
     if (this.argNum >= this.args.length) {
       // handle Positional should have already taken care of it...
-      return
+      return;
     }
-    let arg = this.args[this.argNum]
-    this.haveSeen[this.argNum] = true
-    if ( isNumber( arg )) {
+    let arg = this.args[this.argNum];
+    this.haveSeen[this.argNum] = true;
+    if (typeof arg === "number") {
       switch (wOrP) {
-        case(WorP.WIDTH):
-          this.flags.width = arg
-          break
+        case WorP.WIDTH:
+          this.flags.width = arg;
+          break;
         default:
-        this.flags.precision = arg
+          this.flags.precision = arg;
       }
     } else {
-      let tmp = ( wOrP === WorP.WIDTH ? "WIDTH" : "PREC" ) 
-      this.tmpError = `%!(BAD ${tmp} '${this.args[this.argNum]}')`
+      let tmp = wOrP === WorP.WIDTH ? "WIDTH" : "PREC";
+      this.tmpError = `%!(BAD ${tmp} '${this.args[this.argNum]}')`;
     }
-    this.argNum++
+    this.argNum++;
   }
   handleWidthAndPrecision(flags: Flags): void {
     const fmt = this.format;
@@ -209,11 +195,12 @@ class Printf {
         case State.WIDTH:
           switch (c) {
             case ".":
-              this.flags.precision = 0; // initialize precision, %9.f -> precision=0
+              // initialize precision, %9.f -> precision=0
+              this.flags.precision = 0;
               this.state = State.PRECISION;
               break;
             case "*":
-              this.handleWidthOrPrecisionRef(WorP.WIDTH)
+              this.handleWidthOrPrecisionRef(WorP.WIDTH);
               // force . or flag at this point
               break;
             default:
@@ -233,7 +220,7 @@ class Printf {
           break;
         case State.PRECISION:
           if (c === "*") {
-            this.handleWidthOrPrecisionRef(WorP.PRECISION)
+            this.handleWidthOrPrecisionRef(WorP.PRECISION);
             break;
           }
           const val = parseInt(c);
@@ -260,7 +247,7 @@ class Printf {
     let positional = 0;
     const format = this.format;
     this.i++;
-    let err = false
+    let err = false;
     for (; this.i !== this.format.length; ++this.i) {
       if (format[this.i] === "]") {
         break;
@@ -271,14 +258,14 @@ class Printf {
         //throw new Error(
         //  `invalid character in positional: ${format}[${format[this.i]}]`
         //);
-        this.tmpError = '%!(BAD INDEX)'
-        err = true
+        this.tmpError = "%!(BAD INDEX)";
+        err = true;
       }
       positional += val;
     }
-    if ( (positional -1) >= this.args.length ) {
-        this.tmpError = '%!(BAD INDEX)'
-        err = true
+    if (positional - 1 >= this.args.length) {
+      this.tmpError = "%!(BAD INDEX)";
+      err = true;
     }
     this.argNum = err ? this.argNum : positional - 1;
     return;
@@ -299,16 +286,16 @@ class Printf {
     const verb = this.format[this.i];
     this.verb = verb;
     if (this.tmpError) {
-      this.buf += this.tmpError
-      this.tmpError = undefined
+      this.buf += this.tmpError;
+      this.tmpError = undefined;
       if (this.argNum < this.haveSeen.length) {
-        this.haveSeen[this.argNum] = true // keep track of used args
+        this.haveSeen[this.argNum] = true; // keep track of used args
       }
     } else if (this.args.length <= this.argNum) {
-      this.buf += `%!(MISSING '${verb}')`
+      this.buf += `%!(MISSING '${verb}')`;
     } else {
       let arg = this.args[this.argNum]; // check out of range
-      this.haveSeen[this.argNum] = true // keep track of used args
+      this.haveSeen[this.argNum] = true; // keep track of used args
       if (this.flags.lessthan) {
         this.buf += this.handleLessThan();
       } else {
@@ -319,6 +306,7 @@ class Printf {
     this.state = State.PASSTHROUGH;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _handleVerb(arg: any): string {
     switch (this.verb) {
       case "t":
@@ -386,7 +374,7 @@ class Printf {
     }
     return s;
   }
-  padNum(n_str: string, neg: boolean): string {
+  padNum(nStr: string, neg: boolean): string {
     let sign: string;
     if (neg) {
       sign = "-";
@@ -399,28 +387,28 @@ class Printf {
     if (!zero) {
       // sign comes in front of padding when padding w/ zero,
       // in from of value if padding with spaces.
-      n_str = sign + n_str;
+      nStr = sign + nStr;
     }
 
     const pad = zero ? "0" : " ";
     const len = zero ? this.flags.width - sign.length : this.flags.width;
 
-    while (n_str.length < len) {
+    while (nStr.length < len) {
       if (this.flags.dash) {
-        n_str += pad; // left justify - right pad
+        nStr += pad; // left justify - right pad
       } else {
-        n_str = pad + n_str; // right just - left pad
+        nStr = pad + nStr; // right just - left pad
       }
     }
     if (zero) {
       // see above
-      n_str = sign + n_str;
+      nStr = sign + nStr;
     }
-    return n_str;
+    return nStr;
   }
 
   fmtNumber(n: number, radix: number, upcase: boolean = false): string {
-    let num = Math.abs(n).toString(radix)
+    let num = Math.abs(n).toString(radix);
     const prec = this.flags.precision;
     if (prec !== -1) {
       this.flags.zero = false;
@@ -436,7 +424,8 @@ class Printf {
           prefix += "0b";
           break;
         case 8:
-          prefix += num.startsWith("0") ? "" : "0"; // don't annotate octal 0 with 0...
+          // don't annotate octal 0 with 0...
+          prefix += num.startsWith("0") ? "" : "0";
           break;
         case 16:
           prefix += "0x";
@@ -445,7 +434,8 @@ class Printf {
           throw new Error("cannot handle base: " + radix);
       }
     }
-    num = num.length === 0 ? num : prefix + num; // don't add prefix in front of value truncated by precision=0, val=0
+    // don't add prefix in front of value truncated by precision=0, val=0
+    num = num.length === 0 ? num : prefix + num;
     if (upcase) {
       num = num.toUpperCase();
     }
@@ -479,7 +469,7 @@ class Printf {
       this.flags.zero = false;
       return this.padNum("Inf", true);
     }
-    return null;
+    return "";
   }
 
   roundFractionToPrecision(fractional: string, precision: number): string {
@@ -499,7 +489,7 @@ class Printf {
 
   fmtFloatE(n: number, upcase: boolean = false): string {
     const special = this.fmtFloatSpecial(n);
-    if (special !== null) {
+    if (special !== "") {
       return special;
     }
 
@@ -514,7 +504,8 @@ class Printf {
     fractional = this.roundFractionToPrecision(fractional, precision);
 
     let e = m[F.exponent];
-    e = e.length == 1 ? "0" + e : e; // scientific notation output with exponent padded to minlen 2
+    // scientific notation output with exponent padded to minlen 2
+    e = e.length == 1 ? "0" + e : e;
 
     const val = `${m[F.mantissa]}.${fractional}${upcase ? "E" : "e"}${
       m[F.esign]
@@ -524,11 +515,36 @@ class Printf {
 
   fmtFloatF(n: number): string {
     const special = this.fmtFloatSpecial(n);
-    if (special !== null) {
+    if (special !== "") {
       return special;
     }
 
-    const val = exponential(Math.abs(n)) as string; // avoiding sign makes padding easier
+    // stupid helper that turns a number into a (potentially)
+    // VERY long string.
+    function expandNumber(n: number): string {
+      if (Number.isSafeInteger(n)) {
+        return n.toString() + ".";
+      }
+
+      const t = n.toExponential().split("e");
+      let m = t[0].replace(".", "");
+      const e = parseInt(t[1]);
+      if (e < 0) {
+        let nStr = "0.";
+        for (let i = 0; i !== Math.abs(e) - 1; ++i) {
+          nStr += "0";
+        }
+        return (nStr += m);
+      } else {
+        const splIdx = e + 1;
+        while (m.length < splIdx) {
+          m += "0";
+        }
+        return m.substr(0, splIdx) + "." + m.substr(splIdx);
+      }
+    }
+    // avoiding sign makes padding easier
+    const val = expandNumber(Math.abs(n)) as string;
     const arr = val.split(".");
     const dig = arr[0];
     let fractional = arr[1];
@@ -542,25 +558,31 @@ class Printf {
 
   fmtFloatG(n: number, upcase: boolean = false): string {
     const special = this.fmtFloatSpecial(n);
-    if (special !== null) {
+    if (special !== "") {
       return special;
     }
-    // The double argument representing a floating-point number shall be converted
-    // in the style f or e (or in the style F or E in the case of a G conversion
-    // specifier), depending on the value converted and the precision. Let P equal
-    // the precision if non-zero, 6 if the precision is omitted, or 1 if the precision
-    // is zero. Then, if a conversion with style E would have an exponent of X:
 
-    //     - If P > X>=-4, the conversion shall be with style f (or F ) and precision P -( X+1).
+    // The double argument representing a floating-point number shall be
+    // converted in the style f or e (or in the style F or E in
+    // the case of a G conversion specifier), depending on the
+    // value converted and the precision. Let P equal the
+    // precision if non-zero, 6 if the precision is omitted, or 1
+    // if the precision is zero. Then, if a conversion with style E would
+    // have an exponent of X:
 
-    //     - Otherwise, the conversion shall be with style e (or E ) and precision P -1.
+    //     - If P > X>=-4, the conversion shall be with style f (or F )
+    //     and precision P -( X+1).
 
-    // Finally, unless the '#' flag is used, any trailing zeros shall be removed from
-    // the fractional portion of the result and the decimal-point character shall be
-    // removed if there is no fractional portion remaining.
+    //     - Otherwise, the conversion shall be with style e (or E )
+    //     and precision P -1.
 
-    // A double argument representing an infinity or NaN shall be converted in the
-    // style of an f or F conversion specifier.
+    // Finally, unless the '#' flag is used, any trailing zeros shall be
+    // removed from the fractional portion of the result and the
+    // decimal-point character shall be removed if there is no
+    // fractional portion remaining.
+
+    // A double argument representing an infinity or NaN shall be
+    // converted in the style of an f or F conversion specifier.
     // https://pubs.opengroup.org/onlinepubs/9699919799/functions/fprintf.html
 
     let P =
@@ -573,21 +595,21 @@ class Printf {
     }
 
     let X = parseInt(m[F.exponent]) * (m[F.esign] === "-" ? -1 : 1);
-    let n_str = "";
+    let nStr = "";
     if (P > X && X >= -4) {
       this.flags.precision = P - (X + 1);
-      n_str = this.fmtFloatF(n);
+      nStr = this.fmtFloatF(n);
       if (!this.flags.sharp) {
-        n_str = n_str.replace(/\.?0*$/, "");
+        nStr = nStr.replace(/\.?0*$/, "");
       }
     } else {
       this.flags.precision = P - 1;
-      n_str = this.fmtFloatE(n);
+      nStr = this.fmtFloatE(n);
       if (!this.flags.sharp) {
-        n_str = n_str.replace(/\.?0*e/, upcase ? "E" : "e");
+        nStr = nStr.replace(/\.?0*e/, upcase ? "E" : "e");
       }
     }
-    return n_str;
+    return nStr;
   }
 
   fmtString(s: string): string {
@@ -629,6 +651,8 @@ class Printf {
         );
     }
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   fmtV(val: any): string {
     if (this.flags.sharp) {
       let options =
@@ -640,7 +664,14 @@ class Printf {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   fmtJ(val: any): string {
     return JSON.stringify(val);
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function sprintf(format: string, ...args: any[]): string {
+  let printf = new Printf(format, ...args);
+  return printf.doPrintf();
 }
