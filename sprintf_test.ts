@@ -2,7 +2,6 @@ import { sprintf } from "./sprintf.ts";
 
 import {
   assertEquals,
-  assertNotEquals
 } from "https://deno.land/std/testing/asserts.ts";
 import { test, runTests } from "https://deno.land/std/testing/mod.ts";
 
@@ -13,11 +12,6 @@ test(function noVerb() {
   assertEquals(sprintf("bla"), "bla");
 });
 
-test(function badVerb() {
-  assertEquals(sprintf("%J"), "%!(BAD VERB 'J')");
-  assertEquals(sprintf("bla%J"), "bla%!(BAD VERB 'J')");
-  assertEquals(sprintf("%Jbla"), "%!(BAD VERB 'J')bla");
-});
 
 test(function percent() {
   assertEquals(sprintf("%%"), "%");
@@ -577,6 +571,7 @@ const tests: [string, any, string][] = [
   ["% +07.2f", -1.0, "-001.00"]
 ];
 
+
 test(function testThorough() {
   tests.forEach((t, i) => {
     //            p(t)
@@ -624,5 +619,36 @@ test(function flagLessThan() {
   let fArray = [1.2345, 0.98765, 123456789.5678];
   assertEquals(S("%<.2f", fArray), "[ 1.23, 0.99, 123456789.57 ]");
 });
+
+test (function testErrors() {
+  // wrong type : TODO strict mode ...
+  //assertEquals(S("%f", "not a number"), "%!(BADTYPE flag=f type=string)")
+  assertEquals(S("A %h", ""), "A %!(BAD VERB 'h')")
+  assertEquals(S("%J", ""), "%!(BAD VERB 'J')");
+  assertEquals(S("bla%J", ""), "bla%!(BAD VERB 'J')");
+  assertEquals(S("%Jbla", ""), "%!(BAD VERB 'J')bla");
+
+  assertEquals(S("%d"), "%!(MISSING 'd')")
+  assertEquals(S("%d %d", 1), "1 %!(MISSING 'd')")
+  assertEquals(S("%d %f A", 1), "1 %!(MISSING 'f') A")
+
+  assertEquals(S("%*.2f", "a", 1.1), "%!(BAD WIDTH 'a')")
+  assertEquals(S("%.*f", "a", 1.1), "%!(BAD PREC 'a')")
+  assertEquals(S("%.[2]*f",  1.23, "p"), "%!(BAD PREC 'p')%!(EXTRA '1.23')")
+  assertEquals(S("%.[2]*[1]f Yippie!",  1.23, "p"), "%!(BAD PREC 'p') Yippie!")
+  
+  assertEquals(S("%[1]*.2f", "a", "p"), "%!(BAD WIDTH 'a')")
+
+  assertEquals(S("A", "a", "p"), "A%!(EXTRA 'a' 'p')")
+  assertEquals(S("%[2]s %[2]s", "a", "p"), "p p%!(EXTRA 'a')")
+
+  // remains to be determined how to handle bad indices ...
+  // (realistically) the entire error handling is still up for grabs.
+  assertEquals(S("%[hallo]s %d %d %d", 1,2,3,4), "%!(BAD INDEX) 2 3 4")
+  assertEquals(S("%[5]s", 1,2,3,4), "%!(BAD INDEX)%!(EXTRA '2' '3' '4')")
+  assertEquals(S("%[5]f"), "%!(BAD INDEX)")
+  assertEquals(S("%.[5]f"), "%!(BAD INDEX)")
+  assertEquals(S("%.[5]*f"), "%!(BAD INDEX)")
+})
 
 runTests();

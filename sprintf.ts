@@ -14,6 +14,10 @@ enum State {
   PRECISION,
   WIDTH
 }
+enum WorP {
+  WIDTH,
+  PRECISION
+}
 
 class Flags {
   plus: boolean;
@@ -32,6 +36,10 @@ function exponential(n: number): string {
     s += ".";
   }
   return s;
+}
+
+function isNumber(a:any) : boolean {
+  return (typeof a === 'number')
 }
 
 const min = Math.min;
@@ -59,9 +67,15 @@ class Printf {
   argNum: number = 0;
   flags: Flags;
 
+  haveSeen: boolean[]
+
+  // barf, store precision and width errors for later processing ...
+  tmpError? : string
+
   constructor(format: string, ...args: any[]) {
     this.format = format;
     this.args = args;
+    this.haveSeen = new Array(args.length)
   }
 
   doPrintf(): string {
@@ -86,6 +100,19 @@ class Printf {
         default:
           throw Error("Should be unreachable, certainly a bug in the lib.");
       }
+    }
+    // check for unhandled args
+    let extras = false;
+    let err = "%!(EXTRA"
+    for ( let i = 0; i!== this.haveSeen.length; ++i) {
+      if (!this.haveSeen[i]) {
+        extras = true
+        err += ` '${Deno.inspect(this.args[i])}'`
+      }
+    }
+    err += ")"
+    if (extras) {
+      this.buf += err
     }
     return this.buf;
   }
@@ -131,25 +158,50 @@ class Printf {
                 } else {
                   this.state = State.WIDTH;
                 }
-                this.handleWithAndPrecision(flags);
+                this.handleWidthAndPrecision(flags);
               } else {
                 this.handleVerb();
-                return;
+                return; // always end in verb
               }
           } // switch c
           break;
         case State.POSITIONAL: // either a verb or * only verb for now, TODO
           if (c === "*") {
-            throw new Error("TODO positional width and precision");
+            let worp = this.flags.precision === -1 ? WorP.WIDTH : WorP.PRECISION
+            this.handleWidthOrPrecisionRef( worp )
+            this.state = State.PERCENT
+            break
+          } else {
+            this.handleVerb();
+            return; // always end in verb
           }
-          this.handleVerb();
-          return; // always end in verb
         default:
-          throw new Error("Should not be here, library bug!");
+          throw new Error(`Should not be here ${this.state}, library bug!`)
       } // switch state
     }
   }
-  handleWithAndPrecision(flags: Flags): void {
+  handleWidthOrPrecisionRef ( wOrP: WorP) : void {
+    if (this.argNum >= this.args.length) {
+      // handle Positional should have already taken care of it...
+      return
+    }
+    let arg = this.args[this.argNum]
+    this.haveSeen[this.argNum] = true
+    if ( isNumber( arg )) {
+      switch (wOrP) {
+        case(WorP.WIDTH):
+          this.flags.width = arg
+          break
+        default:
+        this.flags.precision = arg
+      }
+    } else {
+      let tmp = ( wOrP === WorP.WIDTH ? "WIDTH" : "PREC" ) 
+      this.tmpError = `%!(BAD ${tmp} '${this.args[this.argNum]}')`
+    }
+    this.argNum++
+  }
+  handleWidthAndPrecision(flags: Flags): void {
     const fmt = this.format;
     for (; this.i !== this.format.length; ++this.i) {
       const c = fmt[this.i];
@@ -159,10 +211,10 @@ class Printf {
             case ".":
               this.flags.precision = 0; // initialize precision, %9.f -> precision=0
               this.state = State.PRECISION;
-              continue;
+              break;
             case "*":
-              this.flags.width = this.args[this.argNum];
-              this.argNum++; // force . or flag at this point
+              this.handleWidthOrPrecisionRef(WorP.WIDTH)
+              // force . or flag at this point
               break;
             default:
               const val = parseInt(c);
@@ -181,8 +233,7 @@ class Printf {
           break;
         case State.PRECISION:
           if (c === "*") {
-            this.flags.precision = this.args[this.argNum];
-            this.argNum++;
+            this.handleWidthOrPrecisionRef(WorP.PRECISION)
             break;
           }
           const val = parseInt(c);
@@ -209,6 +260,7 @@ class Printf {
     let positional = 0;
     const format = this.format;
     this.i++;
+    let err = false
     for (; this.i !== this.format.length; ++this.i) {
       if (format[this.i] === "]") {
         break;
@@ -216,13 +268,19 @@ class Printf {
       positional *= 10;
       const val = parseInt(format[this.i]);
       if (isNaN(val)) {
-        throw new Error(
-          `invalid character in positional: ${format}[${format[this.i]}]`
-        );
+        //throw new Error(
+        //  `invalid character in positional: ${format}[${format[this.i]}]`
+        //);
+        this.tmpError = '%!(BAD INDEX)'
+        err = true
       }
       positional += val;
     }
-    this.argNum = positional - 1;
+    if ( (positional -1) >= this.args.length ) {
+        this.tmpError = '%!(BAD INDEX)'
+        err = true
+    }
+    this.argNum = err ? this.argNum : positional - 1;
     return;
   }
   handleLessThan(): string {
@@ -240,14 +298,25 @@ class Printf {
   handleVerb(): void {
     const verb = this.format[this.i];
     this.verb = verb;
-    let arg = this.args[this.argNum]; // check out of range
-    if (this.flags.lessthan) {
-      this.buf += this.handleLessThan();
+    if (this.tmpError) {
+      this.buf += this.tmpError
+      this.tmpError = undefined
+      if (this.argNum < this.haveSeen.length) {
+        this.haveSeen[this.argNum] = true // keep track of used args
+      }
+    } else if (this.args.length <= this.argNum) {
+      this.buf += `%!(MISSING '${verb}')`
     } else {
-      this.buf += this._handleVerb(arg);
+      let arg = this.args[this.argNum]; // check out of range
+      this.haveSeen[this.argNum] = true // keep track of used args
+      if (this.flags.lessthan) {
+        this.buf += this.handleLessThan();
+      } else {
+        this.buf += this._handleVerb(arg);
+      }
     }
-    this.state = State.PASSTHROUGH;
     this.argNum++; // if there is a further positional, it will reset.
+    this.state = State.PASSTHROUGH;
   }
 
   _handleVerb(arg: any): string {
@@ -351,8 +420,7 @@ class Printf {
   }
 
   fmtNumber(n: number, radix: number, upcase: boolean = false): string {
-    let num = Math.abs(n).toString(radix);
-
+    let num = Math.abs(n).toString(radix)
     const prec = this.flags.precision;
     if (prec !== -1) {
       this.flags.zero = false;

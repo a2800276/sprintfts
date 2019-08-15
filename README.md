@@ -204,6 +204,7 @@ the 'depth' config parameter
 
 Positional arguments
 --------------------
+
 Arguments do not need to be consumed in the order they are provded and may
 be consumed more than once. E.g.:
 
@@ -221,6 +222,19 @@ Width and precision my also use positionals:
     "%[2]*.[1]*d", 1, 2
 
 This follows the golang conventions and not POSIX.
+
+
+Errors
+------
+
+The following errors are handled:
+
+Incorrect verb:     
+    S("%h", "") %!(BAD VERB 'h')
+
+Too few arguments:
+    S("%d")     %!(MISSING 'd')"
+
 
 
 
